@@ -1,0 +1,8 @@
+numpy
+scipy
+numba
+soundfile
+pyworld
+piper-tts>=1.8
+onnx
+pyloudnorm

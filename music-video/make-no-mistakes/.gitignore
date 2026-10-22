@@ -1,0 +1,4 @@
+build/
+voices/
+node_modules/
+__pycache__/
