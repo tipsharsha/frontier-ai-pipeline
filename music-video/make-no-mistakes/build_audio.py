@@ -474,15 +474,16 @@ def fx(m):
     add("glitch", at(33, 1.5), sy.glitch(0.3), 0.25, p=0.3)
     for k in range(6):
         add("glitch", at(39, 2.2 + 0.25 * k), sy.glitch(0.12, seed=30 + k), 0.12 + 0.03 * k, p=(-1) ** k * 0.4)
-    add("error", 148.15, np.concatenate([sy.blip(46, 0.12), sy.blip(41, 0.25)]), 0.12)
-    add("ding", at(75, 2.8), sy.bell(80, 2.0) + 0.6 * sy.bell(87, 2.0), 0.14, verb=0.6)
+    cue = song.CUES
+    add("error", cue["typo"], np.concatenate([sy.blip(46, 0.12), sy.blip(41, 0.25)]), 0.12)
+    add("ding", cue["fix"], sy.bell(80, 2.0) + 0.6 * sy.bell(87, 2.0), 0.14, verb=0.6)
     # final sting: big chord + impact
     root, pcs = bar_chord(75)
     for k, note in enumerate(voicing(pcs, None) + [place(root, 37)]):
         mix_into(m.stems["pads"], sy.supersaw(note, 1.5, cutoff=3200, attack=0.01, release=1.2, seed=900 + k),
-                 at(75, 3.8), 0.3)
-    add("impact", at(75, 3.8), sy.impact(3.0), 0.4, verb=0.6)
-    m.hit("crash", at(75, 3.8), 0.7)
+                 cue["sting"], 0.3)
+    add("impact", cue["sting"], sy.impact(3.0), 0.4, verb=0.6)
+    m.hit("crash", cue["sting"], 0.7)
 
 
 # Bus levels into the master: set so the lead vocal sits a few dB above the band.
@@ -540,8 +541,8 @@ def master_mix(m, vox_dry, vox_wet, lead_bus):
 
 # ------------------------------------------------------------------ timing + features for the visuals
 
-def envelope_from_hits(times, decay):
-    n = int(LENGTH * FPS) + 1
+def envelope_from_hits(times, decay, length=LENGTH):
+    n = int(length * FPS) + 1
     t = np.arange(n) / FPS
     env = np.zeros(n)
     for h in times:
@@ -599,6 +600,7 @@ def export_timing(clips, m):
         "title": song.TITLE, "bpm": song.BPM, "length": LENGTH, "end": song.END_TIME, "fps": FPS,
         "sections": sections, "lines": lines,
         "typing": [{"t0": t, "text": s, "cps": c} for t, s, c in song.TYPING],
+        "cues": song.CUES,
         "kicks": [round(t, 3) for t in sorted(set(m.kicks))],
         "snares": [round(t, 3) for t in sorted(set(m.snares))],
         "crashes": [round(t, 3) for t in sorted(set(m.crashes))],

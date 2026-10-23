@@ -234,6 +234,18 @@ TYPING = [
     (147.30, "there's a typo in the title.", 0.034),
 ]
 
+# Story beats that a sound effect marks and the picture cuts to: the intro's to-do
+# list being ticked off, the pre-chorus breaks, and the typo being flagged, fixed
+# and stung in the tag.
+CUES = {
+    "tasks": [6.9, 7.08, 7.26, 7.44],
+    "pre1": at(15),
+    "pre2": at(39),
+    "typo": 148.15,
+    "fix": at(75, 2.8),
+    "sting": at(75, 3.8),
+}
+
 NOTE_BASE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 

@@ -3,7 +3,8 @@
 For Suno's Custom mode. Paste each block into the matching field, generate a few
 versions, and keep the one where the words are clearest. Use a Pro or Premier
 plan if the video will be monetised; songs made on the free plan are
-non-commercial.
+non-commercial. The [README](README.md#sung-version-suno) explains how to sync
+the video to the take you keep.
 
 The spoken intro ("Make me a music video. Make no mistakes.") and the closing
 typo dialogue stay as voice-over in the video, so they are not in the lyrics.

@@ -1,0 +1,5 @@
+# suno_sync.py, on top of requirements.txt
+-r requirements.txt
+faster-whisper>=1.1
+transformers
+librosa

@@ -1,9 +1,11 @@
 /* Make No Mistakes: music video renderer.
  *
  * Every frame is a pure function of time: MNM.draw(t). The audio build exports
- * timing.json (sections, per-word lyric timings, drum hits, sound effects) and
- * features.json (per-frame loudness, kick/snare envelopes, spectrum), so the
- * picture lands on the same beats and syllables as the song.
+ * timing.json (sections, per-word lyric timings, and cues for the story beats
+ * the sound effects mark) and features.json (per-frame loudness, kick/snare
+ * envelopes, spectrum), so the picture lands on the same beats and syllables as
+ * the song. Scenes time everything from those, never from fixed seconds, so the
+ * same renderer follows the synthesized song or a sung Suno take.
  */
 (() => {
   'use strict';
@@ -358,6 +360,7 @@
     const n = Math.floor((t - entry.t0) / entry.cps) + 1;
     return { text: entry.text.slice(0, clamp(n, 0, entry.text.length)), typing: n > 0 && n <= entry.text.length };
   }
+  const typedEnd = (entry) => entry.t0 + entry.text.length * entry.cps;
 
   const SPIN = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
 
@@ -367,42 +370,44 @@
 
   // ------------------------------------------------------------ scenes
 
-  const TASKS = [['write the lyrics', 6.9], ['compose the music', 7.08], ['learn to sing', 7.26], ['render the video', 7.44], ['make no mistakes', null]];
+  // The last task is never ticked off. cues.tasks holds when the others are.
+  const TASKS = ['write the lyrics', 'compose the music', 'learn to sing', 'render the video', 'make no mistakes'];
 
   function introRows(t) {
     const rows = [{ text: '✻ agent ready', color: C.dim, size: 28, lh: 76 }];
-    const p1 = typed(T.typing[0], t), p2 = typed(T.typing[1], t);
-    const done1 = t > T.typing[0].t0 + T.typing[0].text.length * T.typing[0].cps;
-    rows.push({ prefix: '> ', text: p1.text, cursor: !done1 || t < T.typing[1].t0, typing: p1.typing, size: 42, lh: 66 });
-    if (t >= T.typing[1].t0 - 0.4) rows.push({ prefix: '> ', text: p2.text, cursor: t < 3.9, typing: p2.typing, size: 42, lh: 66 });
-    if (t >= 3.9 && t < 6.3) {
-      const s = t - 3.9, tokens = Math.floor(80 + 900 * s * s);
+    const [q1, q2] = T.typing;
+    const p1 = typed(q1, t), p2 = typed(q2, t);
+    const ai = get('intro', 'robot')[0];
+    const think = typedEnd(q2) + 0.3;
+    rows.push({ prefix: '> ', text: p1.text, cursor: t <= typedEnd(q1) || t < q2.t0, typing: p1.typing, size: 42, lh: 66 });
+    if (t >= q2.t0 - 0.4) rows.push({ prefix: '> ', text: p2.text, cursor: t < think, typing: p2.typing, size: 42, lh: 66 });
+    if (t >= think && t < ai.t0 - 0.03) {
+      const s = t - think, tokens = Math.floor(80 + 900 * s * s);
       rows.push({ gap: 14 });
       rows.push({ prefix: SPIN[Math.floor(t * 12) % SPIN.length] + ' ', prefixColor: C.amber, text: `Thinking… (${s.toFixed(0)}s · ${tokens.toLocaleString('en-US')} tokens)`, color: C.amber, size: 34 });
     }
-    const ai = get('intro', 'robot')[0];
-    if (ai && t >= ai.t0 - 0.05) {
+    if (t >= ai.t0 - 0.05) {
       rows.push({ gap: 14 });
       rows.push({ prefix: '● ', prefixColor: C.green, text: spokenSoFar(ai, t), size: 42, lh: 66 });
-      if (t >= 6.62) {
-        TASKS.forEach(([name, at], i) => {
-          if (t < 6.62 + i * 0.07) return;
-          const ok = at !== null && t >= at;
-          rows.push({ prefix: ok ? '  ✓ ' : '  ☐ ', prefixColor: ok ? C.green : C.dim, text: name, color: ok ? C.dim : C.white, size: 34, lh: 52 });
-        });
-      }
+      const list = ai.t0 + 0.3;
+      TASKS.forEach((name, i) => {
+        if (t < list + i * 0.07) return;
+        const at = T.cues.tasks[i];
+        const ok = at !== undefined && t >= at;
+        rows.push({ prefix: ok ? '  ✓ ' : '  ☐ ', prefixColor: ok ? C.green : C.dim, text: name, color: ok ? C.dim : C.white, size: 34, lh: 52 });
+      });
     }
     return rows;
   }
 
-  function sceneIntro(t) {
+  function sceneIntro(t, s) {
     gradientBg('#07081a', '#030308');
     aurora(t, [262, 300, 220], 0.9);
     dotGrid(t, 0.09);
-    const appear = easeOut(inv(0, 0.7, t));
-    const zoom = lerp(0.95, 1, appear) * (1 + 2.8 * easeIn(inv(7.5, 8.0, t)));
+    const appear = easeOut(inv(s.t0, s.t0 + 0.7, t));
+    const zoom = lerp(0.95, 1, appear) * (1 + 2.8 * easeIn(inv(s.t1 - 0.5, s.t1, t)));
     ctx.save();
-    ctx.globalAlpha = appear * (1 - inv(7.8, 8.0, t));
+    ctx.globalAlpha = appear * (1 - inv(s.t1 - 0.2, s.t1, t));
     ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2);
     terminal(t, 300, 150, 1320, 780, introRows(t));
     ctx.restore();
@@ -694,11 +699,13 @@
     });
   }
 
+  // A pre-chorus builds until its break (cues.pre1 / cues.pre2), where the band
+  // drops out for the prompt's last words.
   function scenePre1(t, s) {
-    const brk = 30;
+    const brk = T.cues.pre1;
     if (t < brk + 0.2) {
       gradientBg('#0a0718', '#040309');
-      const energy = inv(24, 30, t);
+      const energy = inv(s.t0, brk, t);
       tunnel(t, 262, 330, energy);
       aurora(t, [300, 262], 0.6 + energy);
       ctx.save();
@@ -709,19 +716,19 @@
       promptLines(t, get('pre1', 'lead'), { x: 250, y0: 420, dy: 150, size: 66, prefixColor: C.pink, glow: 'rgba(255,79,163,0.9)', badges: BADGES.pre1 });
       ctx.restore();
     }
-    if (t >= brk) breakPrompt(t, get('pre1', 'spoken')[0], 'fire0');
+    if (t >= brk) breakPrompt(t, get('pre1', 'spoken')[0], brk, s.t1);
   }
 
-  function breakPrompt(t, line, style) {
+  function breakPrompt(t, line, brk, end) {
     ctx.save();
-    ctx.globalAlpha = Math.max(0.001, inv(30, 30.15, t));
+    ctx.globalAlpha = Math.max(0.001, inv(brk, brk + 0.15, t));
     if (!line) { ctx.restore(); return; }
     font(700, 92, MONO);
     const full = '> ' + line.text.toLowerCase();
     const shown = '> ' + spokenSoFar(line, t).toLowerCase();
     const w = ctx.measureText(full).width;
     const x = W / 2 - w / 2, y = H / 2 + 30;
-    const build = inv(line.t1, 32, t);
+    const build = inv(Math.min(line.t1, end - 0.3), end, t);
     ctx.fillStyle = `rgba(255,255,255,${0.04 + 0.1 * build})`;
     ctx.fillRect(0, 0, W, H);
     glowText(shown, x, y, '#ffffff', `rgba(255,79,163,${0.5 + 0.5 * build})`, 20 + 60 * build);
@@ -731,10 +738,10 @@
   }
 
   function scenePre2(t, s) {
-    const brk = 78;
+    const brk = T.cues.pre2;
     if (t < brk + 0.3) {
       gradientBg('#0b0712', '#040306');
-      const energy = inv(72, 78, t);
+      const energy = inv(s.t0, brk, t);
       tunnel(t, 30, 0, energy * 0.7);
       ctx.save();
       ctx.globalAlpha = 1 - inv(brk, brk + 0.3, t);
@@ -749,7 +756,7 @@
         ctx.fillText(toks[i % toks.length], x, y);
       }
       // context meter
-      const fill = lerp(0.82, 1.0, inv(72, 77.5, t));
+      const fill = lerp(0.82, 1.0, inv(s.t0, brk - 0.5, t));
       const mx = 260, my = 170, mw = 1400;
       font(700, 28, MONO); ctx.fillStyle = C.dim; ctx.fillText('CONTEXT WINDOW', mx, my - 22);
       const pct = Math.floor(fill * 100);
@@ -763,18 +770,18 @@
       promptLines(t, get('pre2', 'lead'), { x: 260, y0: 430, dy: 150, size: 66, prefixColor: C.amber, glow: 'rgba(255,181,71,0.9)', badges: BADGES.pre2, dissolve: true });
       ctx.restore();
     }
-    if (t >= brk) burnIn(t, get('pre2', 'robot')[0]);
+    if (t >= brk) burnIn(t, get('pre2', 'robot')[0], brk, s.t1);
   }
 
-  function burnIn(t, line) {
+  function burnIn(t, line, brk, end) {
     if (!line) return;
-    ctx.fillStyle = '#020102'; ctx.globalAlpha = inv(78, 78.3, t); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#020102'; ctx.globalAlpha = inv(brk, brk + 0.3, t); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
     // embers
     for (let i = 0; i < 90; i++) {
       const life = (t * (0.25 + 0.3 * hash(i)) + hash(i * 3)) % 1;
       const x = W / 2 + (hash(i * 5) - 0.5) * 1300 + Math.sin(t * 2 + i) * 30;
       const y = 760 - life * 600;
-      ctx.fillStyle = `rgba(255,${120 + 80 * hash(i)},40,${(1 - life) * 0.7 * inv(78, 78.6, t)})`;
+      ctx.fillStyle = `rgba(255,${120 + 80 * hash(i)},40,${(1 - life) * 0.7 * inv(brk, brk + 0.6, t)})`;
       ctx.fillRect(x, y, 3, 3);
     }
     const ws = line.words;
@@ -786,7 +793,7 @@
     font(900, 150, DISPLAY);
     const shown = hook.filter((w) => t >= w.t0 - 0.03).map((w) => clean(w.w).toLowerCase()).join(' ');
     const flick = 0.75 + 0.25 * Math.sin(t * 37) * Math.sin(t * 23);
-    const build = inv(79.2, 80, t);
+    const build = inv(end - 0.8, end, t);
     ctx.save();
     ctx.shadowColor = `rgba(255,${90 + 60 * flick},30,1)`; ctx.shadowBlur = 50 + 40 * flick + 80 * build;
     ctx.fillStyle = `rgb(255,${200 + 40 * flick},${150 + 80 * build})`;
@@ -1000,6 +1007,9 @@
     }
   }
 
+  // Chorus lines that get a gag, by their opening words.
+  const chorusGag = (line) => (/^(ship|break) it/i.test(line.text) ? 'ship' : /^(one shot|fall down)/i.test(line.text) ? 'shot' : null);
+
   function sceneChorus(t, s) {
     const name = s.name;
     const pal = PAL[name];
@@ -1017,8 +1027,9 @@
       const endT = next ? next.t0 - 0.16 : s.t1 - 0.3;
       if (t < line.t0 - 0.05 || t > endT + 0.25) return;
       // gags around the text; "BREAK" gets its crack in finalWord
-      if (i === 1) progress(t, wordAt(line, 3).t0, line.t1 - 0.1, final ? 'breaking things on purpose…' : 'deploying to prod…');
-      if (i === 2) {
+      const gag = chorusGag(line);
+      if (gag === 'ship') progress(t, wordAt(line, 3).t0, line.t1 - 0.1, final ? 'breaking things on purpose…' : 'deploying to prod…');
+      if (gag === 'shot') {
         if (!final) {
           crosshair(t, line.t0, W / 2, 420);
           slate(t, wordAt(line, 3), 1500, 820);
@@ -1026,7 +1037,7 @@
         rays(t, wordAt(line, 4).t0, line.t1, W / 2, 360, final ? '255,210,140' : name === 'chorus2' ? '160,240,255' : '255,200,240', final ? 0.6 : 1);
       }
       bigLyrics(t, line, endT, pal, 400, { draw: final ? finalWord : null });
-      if (i === 1 && !final) rocket(t, line.t0, line.t0 + 1.9);
+      if (gag === 'ship' && !final) rocket(t, line.t0, line.t0 + 1.9);
     });
     ctx.restore();
     get(name, 'backing').forEach((b) => aiBubble(t, b, 1040, 800));
@@ -1172,35 +1183,35 @@
     for (let x = -((t * 220) % w); x < W; x += w) ctx.fillText(str, x, 46);
   }
 
+  // The outro's sung line ends the song softly over a setting sun.
   function outroSoft(t, s) {
-    const e = inv(139.6, 140.6, t);
+    const line = get('outro', 'lead')[0];
+    if (!line) return;
+    const e = inv(line.t0 - 0.4, line.t0 + 0.6, t);
     if (e <= 0) return;
     ctx.save();
     ctx.globalAlpha = e;
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#2a0b2e'); g.addColorStop(1, '#0a0410');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const sunY = 760 + 180 * inv(140, 144, t);
+    const sunY = 760 + 180 * inv(line.t0, s.t1, t);
     const sg = ctx.createRadialGradient(W / 2, sunY, 10, W / 2, sunY, 600);
     sg.addColorStop(0, 'rgba(255,190,120,0.9)'); sg.addColorStop(0.3, 'rgba(255,120,120,0.35)'); sg.addColorStop(1, 'rgba(255,79,163,0)');
     ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
-    confetti(t, 30, 0.35 * (1 - inv(142, 144, t)));
-    const line = get('outro', 'lead')[0];
-    if (line) {
-      font(300, 120, DISPLAY);
-      ctx.textAlign = 'center';
-      const words = line.words;
-      const total = words.map((w) => clean(w.w).toLowerCase()).join(' ');
-      const tw = ctx.measureText(total).width;
-      let x = W / 2 - tw / 2;
-      ctx.textAlign = 'left';
-      for (const w of words) {
-        const s2 = clean(w.w).toLowerCase();
-        const k = inv(w.t0 - 0.05, w.t0 + 0.3, t);
-        ctx.globalAlpha = e * k * (1 - inv(143.2, 143.9, t));
-        glowText(s2, x, 520 + (1 - easeOut(k)) * 30, '#fff', 'rgba(255,180,120,0.8)', 30);
-        x += ctx.measureText(s2 + ' ').width;
-      }
+    confetti(t, 30, 0.35 * (1 - inv(s.t1 - 2, s.t1, t)));
+    font(300, 120, DISPLAY);
+    ctx.textAlign = 'center';
+    const words = line.words;
+    const total = words.map((w) => clean(w.w).toLowerCase()).join(' ');
+    const tw = ctx.measureText(total).width;
+    let x = W / 2 - tw / 2;
+    ctx.textAlign = 'left';
+    for (const w of words) {
+      const s2 = clean(w.w).toLowerCase();
+      const k = inv(w.t0 - 0.05, w.t0 + 0.3, t);
+      ctx.globalAlpha = e * k * (1 - inv(s.t1 - 0.8, s.t1 - 0.1, t));
+      glowText(s2, x, 520 + (1 - easeOut(k)) * 30, '#fff', 'rgba(255,180,120,0.8)', 30);
+      x += ctx.measureText(s2 + ' ').width;
     }
     ctx.restore();
   }
@@ -1407,8 +1418,8 @@
       ctx.fillRect((x + W) % W, (y + H) % H, 2, 2);
     }
     const [L1, L2, L3, L4] = get('bridge', 'lead');
-    const netFade = 1 - inv(116.0, 117.0, t);
-    const build = inv(104.0, 106.5, t);
+    const netFade = L4 ? 1 - inv(L4.t0 + 0.25, L4.t0 + 1.25, t) : 1;
+    const build = inv(s.t0, s.t0 + 2.5, t);
     const vox = feat('vox', t);
     // network
     if (netFade > 0) {
@@ -1507,15 +1518,18 @@
         ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
       }
     }
-    captions(t, [...get('bridge', 'lead'), ...get('bridge', 'spoken')], 985);
-    const flash = inv(119.6, 120, t);
+    // the bridge's lines, and any line sung here that is held into the next section
+    captions(t, T.lines.filter((l) => l.section === s.name || (l.t0 >= s.t0 && l.t0 < s.t1)), 985);
+    const flash = inv(s.t1 - 0.4, s.t1, t);
     if (flash > 0) { ctx.fillStyle = `rgba(255,240,220,${flash * 0.9})`; ctx.fillRect(0, 0, W, H); }
   }
 
   function captions(t, list, y) {
-    for (const line of list) {
-      if (t < line.t0 - 0.25 || t > line.t1 + 0.5) continue;
-      const a = inv(line.t0 - 0.25, line.t0, t) * (1 - inv(line.t1 + 0.2, line.t1 + 0.5, t));
+    list.forEach((line, i) => {
+      // fade out in time to leave the line clear for the next caption
+      const out = Math.min(line.t1 + 0.2, list[i + 1] ? list[i + 1].t0 - 0.55 : Infinity);
+      if (t < line.t0 - 0.25 || t > out + 0.3) return;
+      const a = inv(line.t0 - 0.25, line.t0, t) * (1 - inv(out, out + 0.3, t));
       font(600, 56);
       const words = line.words;
       const total = words.map((w) => w.w).join(' ');
@@ -1528,7 +1542,7 @@
         x += ctx.measureText(w.w + ' ').width;
       }
       ctx.globalAlpha = 1;
-    }
+    });
   }
 
   // --- tag: the typo
@@ -1550,28 +1564,29 @@
       rows.push({ prefix: '> ', text: p.text, cursor: !r2 || t < r2.t0, typing: p.typing, size: 32, lh: 52 });
     }
     if (r2 && t >= r2.t0 - 0.05) rows.push({ prefix: '● ', prefixColor: C.green, text: spokenSoFar(r2, t), size: 32, lh: 52 });
-    const fixT = 151.4;
+    // cues: the typo is flagged, then fixed, then the closing sting
+    const { typo: typoT, fix: fixT, sting } = T.cues;
     if (t >= fixT + 0.2) rows.push({ prefix: '  ✓ ', prefixColor: C.green, text: 'make no mistakes', color: C.dim, size: 30, lh: 48 });
-    const fadeIn = inv(144, 144.4, t);
-    const end = inv(153.4, 154.6, t);
+    const fadeIn = inv(s.t0, s.t0 + 0.4, t);
+    const end = inv(T.length - 1.6, T.length - 0.4, t);
     ctx.save();
     ctx.globalAlpha = fadeIn * (1 - end);
     terminal(t, 360, 560, 1200, 420, rows);
-    // title card
-    const ta = inv(146.6, 147.0, t);
+    // title card, just after "Zero mistakes."
+    const ta = r1 ? inv(r1.t0 + 0.42, r1.t0 + 0.82, t) : 0;
     if (ta > 0) {
       ctx.globalAlpha = ta * (1 - end);
       const swap = easeInOut(inv(fixT, fixT + 0.4, t));
-      const typoOn = t >= 148.15 && t < fixT;
+      const typoOn = t >= typoT && t < fixT;
       font(900, 150, DISPLAY);
       const pre = 'MAKE NO MIST';
       const preW = ctx.measureText(pre).width;
       const aW = ctx.measureText('A').width, eW = ctx.measureText('E').width;
       const total = ctx.measureText('MAKE NO MISTAKES').width;
       const x0 = W / 2 - total / 2, y0 = 360;
-      const glow = 0.5 + 0.5 * inv(151.9, 152.2, t);
+      const glow = 0.5 + 0.5 * inv(sting, sting + 0.3, t);
       ctx.save();
-      ctx.shadowColor = `rgba(124,92,255,${glow})`; ctx.shadowBlur = 40 + 60 * inv(151.9, 152.3, t);
+      ctx.shadowColor = `rgba(124,92,255,${glow})`; ctx.shadowBlur = 40 + 60 * inv(sting, sting + 0.4, t);
       ctx.fillStyle = '#fff';
       ctx.fillText(pre, x0, y0);
       // The typo "MISTAEKS" swaps its E and K back into "MISTAKES".
@@ -1595,13 +1610,13 @@
       }
       ctx.restore();
       font(500, 34, MONO); ctx.fillStyle = C.dim; ctx.textAlign = 'center';
-      ctx.fillText('a song written, composed, sung & animated by an AI', W / 2, 450);
+      ctx.fillText('a song written, composed, sung & animated by AI', W / 2, 450);
       ctx.textAlign = 'left';
     }
     ctx.restore();
     if (end > 0) {
       ctx.fillStyle = `rgba(0,0,0,${end})`; ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = inv(153.6, 154.0, t) * (1 - inv(154.6, 155, t));
+      ctx.globalAlpha = inv(T.length - 1.4, T.length - 1.0, t) * (1 - inv(T.length - 0.4, T.length, t));
       font(500, 30, MONO); ctx.fillStyle = C.dim; ctx.textAlign = 'center';
       ctx.fillText('prompt: “make me a music video. make no mistakes.”', W / 2, H / 2);
       ctx.textAlign = 'left'; ctx.globalAlpha = 1;
@@ -1649,7 +1664,14 @@
     ctx.restore();
   }
 
-  const FLASHES = [[8.0, 0.8], [32.0, 1.0], [48.0, 0.35], [56.0, 0.3], [80.0, 1.0], [96.0, 0.35], [104.0, 0.4], [120.0, 1.0], [136.0, 0.3], [151.9, 0.7]];
+  // A white flash as these sections hit, and on the closing sting.
+  const FLASH = { verse1: 0.8, chorus1: 1.0, post1: 0.35, verse2: 0.3, chorus2: 1.0, post2: 0.35, bridge: 0.4, final: 1.0, outro: 0.3 };
+
+  function flashAt(t, at, strength) {
+    if (t < at || t >= at + 1) return;
+    ctx.fillStyle = `rgba(255,255,255,${strength * Math.exp(-(t - at) / 0.16)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   const SCENES = {
     intro: sceneIntro, verse1: sceneVerse1, pre1: scenePre1, chorus1: sceneChorus, post1: scenePost,
@@ -1667,16 +1689,13 @@
     SCENES[s.name](t, s);
     ctx.globalAlpha = 1;
     bloom(BLOOM[s.name] * (0.8 + 0.4 * feat('level', t)));
-    if (s.name.startsWith('post') || (s.name === 'outro' && t < 140)) glitch(t, 0.25 * kick(t) + 0.6 * Math.max(0, snare(t) - 0.4));
+    const soft = get('outro', 'lead')[0];
+    if (s.name.startsWith('post') || (s.name === 'outro' && (!soft || t < soft.t0))) glitch(t, 0.25 * kick(t) + 0.6 * Math.max(0, snare(t) - 0.4));
     if (s.name.startsWith('chorus') || s.name === 'final') glitch(t, Math.max(0, kick(t) - 0.85) * 2);
     vignette(0.55);
     grainPass(t, 0.04);
-    for (const [ft, strength] of FLASHES) {
-      if (t >= ft && t < ft + 1) {
-        ctx.fillStyle = `rgba(255,255,255,${strength * Math.exp(-(t - ft) / 0.16)})`;
-        ctx.fillRect(0, 0, W, H);
-      }
-    }
+    for (const sec of T.sections) if (FLASH[sec.name]) flashAt(t, sec.t0, FLASH[sec.name]);
+    flashAt(t, T.cues.sting, 0.7);
     const fadeIn = 1 - inv(0, 0.35, t);
     if (fadeIn > 0) { ctx.fillStyle = `rgba(0,0,0,${fadeIn})`; ctx.fillRect(0, 0, W, H); }
   }
