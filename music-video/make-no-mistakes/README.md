@@ -43,3 +43,6 @@ Both voices are from [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)
 person typing the prompts. `VOICES` in `build_audio.py` picks them; Piper models
 also work, e.g. `piper:en_US-ljspeech-high` with the model in `./voices`.
 Everything else is synthesized from scratch.
+
+For a real singing voice, generate the song in Suno with
+[SUNO_PROMPT.md](SUNO_PROMPT.md) and sync the video to that track instead.
