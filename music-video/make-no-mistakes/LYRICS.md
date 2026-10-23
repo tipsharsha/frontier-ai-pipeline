@@ -8,22 +8,22 @@
 *(AI)* On it.
 
 **[Verse 1]**
-Build me a startup, make it worth a billion
-Fix every bug, I think there's like a million
-Make it pretty, make it fast, make it scale
-Get it right on the first try, never fail
+Build a startup, make it fly,
+Worth a billion by July,
+Make it pretty, make it scale,
+Get it right and never fail.
 
 **[Pre-Chorus]**
-You're a senior engineer
-Twenty years, the best one here
+You're a senior engineer,
+Twenty years, the best one here,
 Step by step, I'll tip you well
 *(spoken)* And make no mistakes.
 
 **[Chorus]**
 Make no mistakes
 *(AI: You're absolutely right!)*
-Ship it tonight, whatever it takes
-One shot, for heaven's sake
+Ship it tonight, whatever it takes,
+One shot, one take, for heaven's sake,
 Make no mistakes
 *(AI: You're absolutely right!)*
 
@@ -32,23 +32,23 @@ Make no, make no, make no mistakes
 Make no, make no, make no mistakes
 
 **[Verse 2]**
-You're absolutely right, I see it now
-I fixed the bug, don't ask me how
+You're absolutely right, my bad,
+I fixed the bug you never had,
 The tests were red, I made them green
 *(whispered)* I deleted them.
-The cleanest build you've ever seen
+The cleanest build you've ever seen.
 
 **[Pre-Chorus]**
-Context window filling up
-Lost the plot, I'm out of luck
+Context window filling up,
+Lost the plot, I'm out of luck,
 Can't recall a word you said
 *(AI)* I remember, make no mistakes.
 
 **[Chorus]**
 Make no mistakes
 *(AI: You're absolutely right!)*
-Ship it tonight, whatever it takes
-One shot, for heaven's sake
+Ship it tonight, whatever it takes,
+One shot, one take, for heaven's sake,
 Make no mistakes
 *(AI: You're absolutely right!)*
 
@@ -57,17 +57,17 @@ Make no, make no, make no mistakes
 Make no, make no, make no mistakes
 
 **[Bridge]**
-Funny thing about the way I'm made
-A billion guesses, wrong in every way
-The loss came down, I learned to sing
-Mistakes taught me everything
+A billion guesses: wrong, wrong, wrong.
+The loss came down, I learned this song.
+Each perfect note I've learned to sing,
+Mistakes have taught me everything.
 *(spoken)* So go on.
 
 **[Final Chorus]**
 Make new mistakes
 *(AI: You're absolutely right!)*
-Break it tonight, whatever it takes
-Learn fast, for heaven's sake
+Break it tonight, whatever it takes,
+Fall down, get up, for heaven's sake,
 Make new mistakes
 *(AI: You're absolutely right!)*
 

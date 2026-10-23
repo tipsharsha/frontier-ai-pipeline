@@ -20,20 +20,31 @@ import soundfile as sf
 import singer
 import song
 import synth as sy
-from singer import Note, Singer, Style
+from singer import KokoroSpeaker, Note, PiperSpeaker, Singer, Style
 from song import BAR, BEAT, S16, at
 from synth import SR, mix_into
 
 HERE = Path(__file__).resolve().parent
 BUILD = Path(os.environ.get("BUILD_DIR", HERE / "build"))
-VOICES = Path(os.environ.get("VOICES_DIR", HERE / "voices"))
+VOICES_DIR = Path(os.environ.get("VOICES_DIR", HERE / "voices"))  # Piper models, if used
 LENGTH = song.END_TIME + 3.0
 N = int(LENGTH * SR)
 FPS = 30
 
-# Piper voices with public-domain training data (LJ Speech; Bryce Beattie's recordings).
-# The AI's spoken asides use the same voice as the singer, robot-processed.
-VOICE_FILES = {"lead": "en_US-ljspeech-high", "ai": "en_US-ljspeech-high", "user": "en_US-bryce-medium"}
+# "engine:voice". Kokoro-82M voices (Apache-2.0); the AI's spoken asides use the
+# singer's voice, robot-processed. "piper:en_US-ljspeech-high" also works.
+VOICES = {"lead": "kokoro:af_heart", "ai": "kokoro:af_heart", "user": "kokoro:am_michael"}
+
+
+def make_speaker(spec):
+    engine, name = spec.split(":", 1)
+    if engine == "kokoro":
+        return KokoroSpeaker(name, lexicon=song.PRONOUNCE)
+    if engine == "piper":
+        return PiperSpeaker(VOICES_DIR / f"{name}.onnx")
+    raise ValueError(f"unknown TTS engine in {spec!r}")
+
+
 KIND_STYLE = {
     "lead": dict(glide=0.045, vibrato=0.22, scoop=0.45, jitter=0.03),
     "double": dict(glide=0.04, vibrato=0.12, scoop=0.3, jitter=0.03),
@@ -65,6 +76,7 @@ def _sung_words(text, mel):
 
 def _spoken_words(singer, text, t0, length_scale=1.0):
     _, phones = singer.speak(song.tts_text(text), length_scale=length_scale)
+    t0 -= singer.lead_silence(song.tts_text(text), length_scale)  # say() trims it
     words = text.split()
     groups, cur = [], []
     for ph, a, b in phones:
@@ -91,10 +103,9 @@ def _spoken_words(singer, text, t0, length_scale=1.0):
 
 def _part_key(p):
     """Everything that changes how a part sounds (not where it sits in the mix)."""
-    sung = p.kind not in ("spoken", "robot", "whisper")
     return repr((p.kind, p.voice, round(p.bar, 4), p.text, p.melody, p.transpose, sorted(p.style.items()),
-                 song.KEY, VOICE_FILES[p.voice], sorted(KIND_STYLE.get(p.kind, {}).items()),
-                 singer.VERSION if sung else None))
+                 song.KEY, VOICES[p.voice], sorted(song.PRONOUNCE.items()), sorted(KIND_STYLE.get(p.kind, {}).items()),
+                 singer.VERSION))
 
 
 def render_vocals(fresh=False):
@@ -108,9 +119,10 @@ def render_vocals(fresh=False):
     for i, p in enumerate(song.build_parts()):
         key = _part_key(p)
         if key not in cache:
-            if p.voice not in singers:
-                singers[p.voice] = Singer(VOICES / f"{VOICE_FILES[p.voice]}.onnx")
-            s = singers[p.voice]
+            spec = VOICES[p.voice]
+            if spec not in singers:
+                singers[spec] = Singer(make_speaker(spec))
+            s = singers[spec]
             rng = np.random.default_rng(zlib.crc32(key.encode()))
             if p.kind in ("spoken", "robot", "whisper"):
                 st = Style(**p.style)
@@ -473,9 +485,9 @@ def fx(m):
     m.hit("crash", at(75, 3.8), 0.7)
 
 
-# Bus levels into the master: set so the lead vocal sits level with the band.
+# Bus levels into the master: set so the lead vocal sits a few dB above the band.
 INST_DB = -6.0
-VOX_DB = 5.0
+VOX_DB = 6.5
 
 
 def vocal_duck(lead_bus, depth=0.3):

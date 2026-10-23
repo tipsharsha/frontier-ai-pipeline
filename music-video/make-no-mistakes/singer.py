@@ -1,24 +1,28 @@
-"""Make a Piper TTS voice sing.
+"""Make a text-to-speech voice sing.
 
-Each lyric line is spoken by Piper as one phrase (so words flow naturally), then
-re-timed and re-pitched with the WORLD vocoder: Piper's phoneme alignments tell
-us where every syllable's consonants and vowel sit, the vowel nucleus is placed
-on the beat and stretched to the note length, and F0 is replaced by the melody.
+Each lyric line is spoken as one phrase (so words flow naturally) by a TTS engine
+that reports when every phoneme starts and ends: Kokoro (its duration
+predictor) or Piper (its alignments). The WORLD vocoder then re-times and
+re-pitches it: each syllable's vowel is placed on the beat and stretched to the
+note length, and F0 is replaced by the melody.
 """
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
 import pyworld as pw
-from piper import PiperVoice, SynthesisConfig
 from scipy.signal import resample_poly
 
 OUT_SR = 48000
 FRAME = 0.005  # WORLD frame period in seconds
-VERSION = 2  # bump when the singing changes, so cached renders are redone
+VERSION = 4  # bump when the singing or speech changes, so cached renders are redone
 HOLD_SPEED = 0.15  # how fast long notes drift through the vowel (1 = speaking rate)
 
-VOWELS = set("aeiouyæɐɑɒɔəɘɚɛɜɝɞɤɨɪʉʊʌʏɯøœɶᵻ")
+# IPA vowels from espeak (Piper) plus misaki's (Kokoro) one-letter diphthongs
+# A=eɪ I=aɪ O=oʊ W=aʊ Y=ɔɪ and its reduced schwa ᵊ.
+VOWELS = set("aeiouyæɐɑɒɔəɘɚɛɜɝɞɤɨɪʉʊʌʏɯøœɶᵻᵊAIOWY")
+DIPHTHONGS = set("AIOWY")
 MODIFIERS = set("ːˑʲ̃")
 SYLLABIC = "̩"
 STRESS = set("ˈˌ")
@@ -48,8 +52,8 @@ class Style:
     monotone: float | None = None  # fixed MIDI pitch for robot speech
     breath: float = 0.0  # aspiration noise mixed into voiced frames (0..1)
     consonant_db: float = 4.5  # lift unvoiced frames so consonants survive the mix
-    length_scale: float = 1.0  # Piper speaking rate before re-timing
-    seed: int = 0
+    length_scale: float = 1.0  # speaking pace before re-timing (>1 is slower)
+    seed: int = 0  # also selects the TTS take, so doubles differ from the lead
 
 
 @dataclass
@@ -124,6 +128,9 @@ def _syllabify(phones, expected):
         elif len(elems) > 1:
             e0, e1, _ = elems[0]
             h0, h1 = e0 + 0.25 * (e1 - e0), e0 + 0.85 * (e1 - e0)
+        elif elems[0][2] in DIPHTHONGS:  # one-letter diphthong: hold its first half
+            e0, e1, _ = elems[0]
+            h0, h1 = e0 + 0.15 * (e1 - e0), e0 + 0.5 * (e1 - e0)
         else:
             e0, e1, _ = elems[0]
             h0, h1 = e0 + 0.3 * (e1 - e0), e0 + 0.7 * (e1 - e0)
@@ -161,29 +168,68 @@ def _syllabify(phones, expected):
     return sylls
 
 
-class Singer:
+class KokoroSpeaker:
+    """Kokoro-82M speech; its duration predictor times every phoneme."""
+
+    sr = 24000
+    FRAME_SAMPLES = 600  # one predicted-duration frame at 24 kHz
+
+    def __init__(self, voice, lexicon=None, blend_with=("af_bella", "af_aoede")):
+        import misaki.espeak
+
+        # misaki only uses espeak for words missing from its dictionaries, and
+        # the pip build of espeak-ng exits the process if it cannot find its
+        # data. Lyrics are checked syllable by syllable, so a dropped word fails
+        # loudly later instead.
+        class _NoEspeak:
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("espeak fallback disabled")
+
+        misaki.espeak.EspeakFallback = _NoEspeak
+        from kokoro import KPipeline
+
+        self._infer = KPipeline.infer
+        self.pipe = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+        self.voice = self.pipe.load_voice(voice)
+        self.blends = [self.pipe.load_voice(v) for v in blend_with]
+        self.lexicon = lexicon or {}
+
+    def phonemize(self, text):
+        # misaki's inline syntax "[word](/phonemes/)" overrides a pronunciation.
+        for word, ph in self.lexicon.items():
+            text = re.sub(rf"\b{word}\b", f"[{word}](/{ph}/)", text, flags=re.IGNORECASE)
+        return self.pipe.g2p(text)[0]
+
+    def speak(self, text, speed=1.0, take=0):
+        # Kokoro is deterministic, so other takes (double-tracked vocals) blend
+        # in a little of a second voice and shift the pace slightly.
+        pack = self.voice
+        if take:
+            pack = 0.8 * self.voice + 0.2 * self.blends[take % len(self.blends)]
+            speed *= 1 + 0.03 * (take % 3 - 1)
+        ps = self.phonemize(text)
+        out = self._infer(self.pipe.model, ps, pack, speed)
+        audio = out.audio.numpy().astype(np.float64)
+        bounds = np.concatenate([[0.0], np.cumsum(out.pred_dur.numpy() * self.FRAME_SAMPLES / self.sr)])
+        names = ["^"] + [p for p in ps if p in self.pipe.model.vocab] + ["$"]
+        return audio, [(names[i], bounds[i], bounds[i + 1]) for i in range(len(names))]
+
+
+class PiperSpeaker:
+    """Piper speech with its phoneme alignments."""
+
     def __init__(self, model_path, speaker_id=None):
+        from piper import PiperVoice
+
         self.voice = PiperVoice.load(model_path, include_alignments=True)
         self.sr = self.voice.config.sample_rate
         self.speaker_id = speaker_id
-        self._cache = {}
 
-    def speak(self, text, length_scale=1.0, noise=0.667, noise_w=0.8, take=0):
-        """Piper speech plus a (phoneme, start, end) list in seconds.
+    def speak(self, text, speed=1.0, take=0):
+        # Piper samples fresh noise on every call, so every take differs anyway.
+        from piper import SynthesisConfig
 
-        Piper samples fresh noise on every call, so each `take` is a slightly
-        different performance (used for double-tracked vocals).
-        """
-        key = (text, length_scale, noise, noise_w, take)
-        if key in self._cache:
-            return self._cache[key]
-        cfg = SynthesisConfig(
-            speaker_id=self.speaker_id,
-            length_scale=length_scale,
-            noise_scale=noise,
-            noise_w_scale=noise_w,
-            normalize_audio=False,
-        )
+        cfg = SynthesisConfig(speaker_id=self.speaker_id, length_scale=1.0 / speed, normalize_audio=False)
         audio, phones, t = [], [], 0.0
         for chunk in self.voice.synthesize(text, cfg, include_alignments=True):
             audio.append(chunk.audio_float_array.astype(np.float64))
@@ -193,13 +239,36 @@ class Singer:
                 t += d
         if not phones:
             raise RuntimeError(f"no alignments for {text!r}")
-        out = (np.concatenate(audio), phones)
-        self._cache[key] = out
-        return out
+        return np.concatenate(audio), phones
+
+
+class Singer:
+    def __init__(self, speaker):
+        self.speaker = speaker
+        self.sr = speaker.sr
+        self._cache = {}
+
+    def speak(self, text, length_scale=1.0, take=0):
+        """Speech plus a (phoneme, start, end) list in seconds."""
+        key = (text, length_scale, take)
+        if key not in self._cache:
+            self._cache[key] = self.speaker.speak(text, speed=1.0 / length_scale, take=take)
+        return self._cache[key]
+
+    def lead_silence(self, text, length_scale=1.0):
+        """Seconds of silence before the first phoneme, less a 30 ms run-in."""
+        _, phones = self.speak(text, length_scale=length_scale)
+        first = next(t0 for ph, t0, _ in phones if ph not in ("^", " "))
+        return max(0.0, first - 0.03)
 
     def say(self, text, style=Style(), pitch_shift=0.0):
-        """Spoken line (optionally robot-monotone / whispered / formant-shifted)."""
+        """Spoken line (optionally robot-monotone / whispered / formant-shifted).
+
+        The clip starts just before the first phoneme (Kokoro leads with ~0.4 s
+        of silence), so a part's start time is when the voice starts.
+        """
         audio, _ = self.speak(text, length_scale=style.length_scale)
+        audio = audio[int(self.lead_silence(text, style.length_scale) * self.sr):]
         if style.monotone is None and not style.whisper and style.formant == 1.0 and pitch_shift == 0:
             return self._to_out(audio)
         f0, sp, ap = self._analyze(audio)
@@ -259,8 +328,12 @@ class Singer:
         coda_len[-1] = min(C, max(room_in(ends[-1] - starts[-1]), 0.45 * (ends[-1] - starts[-1])))
         coda_end[-1] = ends[-1]
 
-        t0 = starts[0] - onset_t[0]
-        t1 = coda_end[-1] + 0.02
+        # Run in from the TTS's own silence before the first consonant and out
+        # after the last, so the vocoder's start-up and the clip fades never eat
+        # a short initial consonant (Kokoro's "sh" in "Ship" is only 50 ms).
+        run = 0.06
+        t0 = starts[0] - onset_t[0] - run
+        t1 = coda_end[-1] + run
         nf = int(np.ceil((t1 - t0) / FRAME))
         tt = t0 + np.arange(nf) * FRAME
         src = np.full(nf, -1.0)  # source time per target frame; -1 = silence
@@ -302,6 +375,13 @@ class Singer:
             seg = x >= nuc_end
             out[seg] = np.interp(x[seg], [nuc_end, coda_end[k]], [s.n1, s.c1])
             src[m] = out
+        first = starts[0] - onset_t[0]
+        lead = tt < first
+        src[lead] = np.maximum(sylls[0].o0 - (first - tt[lead]), 0.0)
+        owner[lead] = 0
+        tail = tt >= coda_end[-1]
+        src[tail] = sylls[-1].c1 + (tt[tail] - coda_end[-1])
+        owner[tail] = n - 1
 
         # Resample WORLD parameters along the warped time axis.
         nsrc = len(f0s)

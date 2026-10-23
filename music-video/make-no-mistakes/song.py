@@ -72,19 +72,19 @@ class Part:
 HOOK = "A4:4 F#4:4 E4:2 F#4:10 r12"
 HOOK_HARM = "F#4:4 D4:4 C#4:2 D4:10 r12"
 HOOK_HARM_MINOR = "F#4:4 C#4:4 C#4:2 C#4:10 r12"
-BACKING_E = "B4:1 B4:1 B4:1 B4:2 G#4:1 B4:2"
-BACKING_FM = "C#5:1 C#5:1 C#5:1 C#5:2 A4:1 C#5:2"
+BACKING_E = "B4:1 B4:1 B4:1 B4:2 G#4:2 B4:2"
+BACKING_FM = "C#5:1 C#5:1 C#5:1 C#5:2 A4:2 C#5:2"
 SHIP = "F#4:2 F#4:2 E4:2 F#4:6 E4:2 F#4:2 E4:2 C#4:2 E4:12"
 SHIP_HARM = "C#4:2 C#4:2 C#4:2 C#4:6 C#4:2 D4:2 C#4:2 A3:2 C#4:12"
-SHOT = "A4:4 F#4:4 E4:2 F#4:2 A4:4 B4:12 r4"
-SHOT_HARM = "F#4:4 D4:4 C#4:2 D4:2 F#4:4 G#4:12 r4"
+SHOT = "A4:4 F#4:4 E4:2 F#4:6 r2 E4:2 F#4:2 A4:2 B4:8"
+SHOT_HARM = "F#4:4 D4:4 C#4:2 D4:6 r2 C#4:2 D4:2 F#4:2 G#4:8"
 CHOP = "A4:2 F#4:2 r2 A4:2 F#4:2 r2 A4:2 F#4:2 E4:2 F#4:10 r4"
 
 
 def chorus(first_bar, section, tr=0, final=False):
     word = "new" if final else "no"
     l2 = "Break it to-night, what-ev-er it takes" if final else "Ship it to-night, what-ev-er it takes"
-    l3 = "Learn fast, for heav-en's sake" if final else "One shot, for heav-en's sake"
+    l3 = "Fall down, get up, for heav-en's sake" if final else "One shot, one take, for heav-en's sake"
     hook = f"Make {word} mis-takes"
     lines = [
         (0, hook, HOOK, HOOK_HARM),
@@ -105,10 +105,11 @@ def chorus(first_bar, section, tr=0, final=False):
             Part("harmony", b, text, harm, section=section, transpose=tr, gain=0.3, pan=0.2 if off % 4 else -0.2,
                  style={"seed": 31 + off}, display=False)
         )
-    # The robot's reply fills the gap after the hook, ending a beat before the next line.
+    # The robot's reply fills the gap after the hook ("-LUTE-" and "RIGHT" on beats 3
+    # and 4), ending an eighth note before the next line.
     for off, mel in ((1, BACKING_E), (7, BACKING_FM)):
         parts.append(
-            Part("backing", first_bar + off + 0.375, "You're ab-so-lute-ly right!", mel, voice="ai",
+            Part("backing", first_bar + off + 5 / 16, "You're ab-so-lute-ly right!", mel, voice="ai",
                  section=section, transpose=tr, gain=0.55, pan=0.3)
         )
     return parts
@@ -150,34 +151,34 @@ def pre_lines(first_bar, section, texts):
     return parts
 
 
+# Verse 1 is a trochaic chant (BUILD a START-up, MAKE it FLY): stresses on beats
+# 2, 3 and 4, rhyme word on the next downbeat.
 VERSE_1 = [
-    ("Build me a start-up, make it worth a bil-lion",
-     "r2 A3:2 A3:2 A3:2 C#4:2 B3:4 A3:2 A3:2 C#4:2 B3:2 A3:2 F#3:6 r2"),
-    ("Fix ev-ery bug, I think there's like a mil-lion",
-     "r2 A3:2 A3:2 A3:2 D4:4 C#4:2 A3:2 A3:2 D4:2 C#4:2 A3:2 F#3:6 r2"),
-    ("Make it pret-ty, make it fast, make it scale",
-     "C#4:2 C#4:2 E4:2 C#4:2 C#4:2 C#4:2 E4:4 E4:2 E4:2 C#4:8 r4"),
-    ("Get it right on the first try, nev-er fail",
-     "B3:2 B3:2 E4:2 D4:2 C#4:2 B3:2 G#3:4 B3:2 C#4:2 B3:8 r4"),
+    ("Build a start-up, make it fly", "r4 C#4:2 C#4:2 E4:2 C#4:2 B3:2 A3:2 C#4:8 r8"),
+    ("Worth a bil-lion by Ju-ly", "r4 B3:2 C#4:2 E4:2 C#4:2 B3:2 A3:2 A3:8 r8"),
+    ("Make it pret-ty, make it scale", "r4 E4:2 E4:2 F#4:2 E4:2 C#4:2 B3:2 C#4:8 r8"),
+    ("Get it right and nev-er fail", "r4 E4:2 E4:2 F#4:2 E4:2 D4:2 C#4:2 B3:8 r8"),
 ]
 
+# Verse 2 is iambic (you're AB-so-LUTE-ly RIGHT, my BAD) with an eighth-note pickup.
 VERSE_2 = [
-    ("You're ab-so-lute-ly right, I see it now",
-     "A3:2 A3:2 A3:2 C#4:2 B3:2 A3:4 r2 A3:2 C#4:2 B3:2 F#3:6 r4"),
-    ("I fixed the bug, don't ask me how",
-     "r2 A3:2 A3:2 A3:2 D4:4 r2 D4:2 C#4:2 A3:2 A3:8 r4"),
-    ("The tests were red, I made them green",
-     "C#4:2 C#4:2 C#4:2 E4:4 C#4:2 C#4:2 C#4:2 E4:6 r10"),
-    ("The clean-est build you've ev-er seen",
-     "B3:2 E4:2 D4:2 B3:4 r2 B3:2 C#4:2 B3:2 B3:10 r4"),
+    ("You're ab-so-lute-ly right, my bad", "r2 A3:2 C#4:2 B3:2 C#4:2 B3:2 A3:2 B3:2 C#4:8 r8"),
+    ("I fixed the bug you nev-er had", "r2 A3:2 D4:2 C#4:2 D4:2 C#4:2 A3:2 B3:2 A3:8 r8"),
+    ("The tests were red, I made them green", "r2 C#4:2 E4:2 C#4:2 B3:2 C#4:2 E4:2 F#4:2 A4:8 r8"),
+    ("The clean-est build you've ev-er seen", "r2 B3:2 E4:2 D4:2 E4:2 D4:2 C#4:2 D4:2 B3:8 r8"),
 ]
 
+# The bridge is half time: each line starts on an eighth-note pickup in the bar
+# before, and its stresses fall on beats 1 and 3.
 BRIDGE = [
-    ("Fun-ny thing a-bout the way I'm made", "A3:2 A3:2 D4:4 C#4:2 D4:2 E4:2 F#4:2 E4:2 D4:10 r4"),
-    ("A bil-lion guess-es, wrong in ev-ery way", "C#4:2 C#4:2 E4:4 E4:2 C#4:2 E4:4 C#4:2 B3:2 A3:2 A3:8 r2"),
-    ("The loss came down, I learned to sing", "B3:2 E4:4 E4:2 G#4:4 F#4:4 E4:4 F#4:2 G#4:10"),
-    ("Mis-takes taught me ev-ery-thing", "A4:2 F#4:6 E4:4 C#4:4 C#4:2 E4:2 F#4:4 r8"),
+    ("A bil-lion guess-es, wrong, wrong, wrong", "A3:2 D4:4 C#4:4 D4:4 E4:4 F#4:4 E4:4 D4:4 r4"),
+    ("The loss came down, I learned this song", "C#4:2 E4:6 C#4:2 B3:6 C#4:2 E4:6 F#4:2 E4:4 r4"),
+    ("Each per-fect note I've learned to sing", "B3:2 E4:6 D4:2 E4:6 F#4:2 G#4:6 F#4:2 G#4:4 r4"),
+    ("Mis-takes have taught me ev-ery-thing", "A4:2 F#4:6 E4:2 E4:6 C#4:2 C#4:4 E4:2 F#4:4 r6"),
 ]
+
+# Pronunciations for the TTS where its default does not fit the melody.
+PRONOUNCE = {"everything": "ˈɛvɹiθˌɪŋ", "new": "nˈju"}
 
 NATURAL = {"vibrato": 0.3, "glide": 0.06, "scoop": 0.5, "breath": 0.06}
 ROBOT = {"monotone": 64, "formant": 1.08, "jitter": 0.0}
@@ -199,8 +200,8 @@ def build_parts():
     p += post_chorus(24, "post1")
 
     p += verse_lines(28, "verse2", VERSE_2)
-    p.append(Part("whisper", at(32, 5.6) / BAR, "I deleted them.", voice="lead", section="verse2", gain=0.9,
-                  pan=0.15, style={"whisper": True}))
+    p.append(Part("whisper", at(33, 2.0) / BAR, "I deleted them.", voice="lead", section="verse2", gain=0.9,
+                  pan=0.15, style={"whisper": True, "length_scale": 0.9}))
     p += pre_lines(36, "pre2", ["Con-text win-dow fill-ing up", "Lost the plot, I'm out of luck",
                                 "Can't re-call a word you said"])
     p.append(Part("robot", at(39, 0.0) / BAR, "I remember, make no mistakes.", voice="ai", section="pre2",
@@ -209,8 +210,9 @@ def build_parts():
     p += post_chorus(48, "post2")
 
     for i, (text, mel) in enumerate(BRIDGE):
-        p.append(Part("lead", 52 + 2 * i, text, mel, section="bridge", style=dict(NATURAL)))
-    p.append(Part("spoken", at(59, 2.2) / BAR, "So go on.", voice="lead", section="bridge", gain=0.8))
+        p.append(Part("lead", 52 + 2 * i - 1 / 8, text, mel, section="bridge", style=dict(NATURAL)))
+    p.append(Part("spoken", at(59, 2.3) / BAR, "So go on.", voice="lead", section="bridge", gain=0.8,
+                  style={"length_scale": 0.8}))
 
     p += chorus(60, "final", tr=2, final=True)
     p += post_chorus(68, "outro", tr=2, word="new")[:2]

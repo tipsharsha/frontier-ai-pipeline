@@ -492,58 +492,70 @@
     font(600, 26, MONO); ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.fillText(str, x, y); ctx.textAlign = 'left';
   }
 
-  function gagVerse1(t, ls) {
+  // Visible from just before a line until just before the next one starts.
+  function holdFor(t, L, next, end) {
+    const until = next ? next.t0 - 0.35 : end;
+    return inv(L.t0 - 0.4, L.t0, t) * (1 - inv(until, until + 0.3, t));
+  }
+
+  function gagVerse1(t, ls, end) {
     const cx = 470;
-    // 1: unicorn valuation
-    const L1 = ls[0];
+    const [L1, L2, L3, L4] = ls;
+    // "Build a startup, make it fly": the unicorn takes off on "fly"
     if (L1) {
-      const a = inv(L1.t0 - 0.4, L1.t0, t) * (1 - inv(L1.t1 + 0.3, L1.t1 + 0.6, t));
+      const a = holdFor(t, L1, L2, end);
       if (a > 0) {
         ctx.save(); ctx.globalAlpha *= a;
-        emoji('🦄', cx, 380 + Math.sin(t * 4) * 14, 210, Math.sin(t * 2) * 0.08);
-        const p = easeIn(inv(L1.t0, wordAt(L1, 9).t0 + 0.2, t));
-        panelLabel('VALUATION', cx, 560);
-        font(900, 86, DISPLAY); ctx.textAlign = 'center';
-        glowText('$' + fmt(1e9 * p), cx, 660, p >= 1 ? C.green : C.white, p >= 1 ? 'rgba(67,245,154,0.9)' : 'rgba(124,92,255,0.6)', 24);
-        ctx.textAlign = 'left';
-        ctx.restore();
-      }
-    }
-    // 2: bug swarm
-    const L2 = ls[1];
-    if (L2) {
-      const a = inv(L2.t0 - 0.3, L2.t0, t) * (1 - inv(L2.t1 + 0.2, L2.t1 + 0.5, t));
-      if (a > 0) {
-        ctx.save(); ctx.globalAlpha *= a;
-        const p = inv(L2.t0, L2.t1 - 0.3, t);
-        const n = Math.floor(4 + 150 * p * p);
-        for (let i = 0; i < n; i++) {
-          const bx = 80 + hash(i * 1.3) * 780 + Math.sin(t * (1 + hash(i)) + i) * 40;
-          const by = 160 + hash(i * 2.9) * 760 + Math.cos(t * (1.2 + hash(i * 3)) + i) * 30;
-          emoji('🐛', bx, by, 30 + 26 * hash(i * 7), Math.sin(t * 3 + i) * 0.6);
+        panelLabel('STARTUP', cx, 290);
+        const fly = wordAt(L1, 5);
+        const up = easeIn(inv(fly.t0, fly.t0 + 1.4, t));
+        const x = cx + up * 260, y = 500 - up * 760 + Math.sin(t * 4) * 14 * (1 - up);
+        if (up > 0) {
+          for (let i = 0; i < 14; i++) {
+            const q = i / 14;
+            sparkle(x - 30 - q * 120 * up, y + 60 + q * 220 * up, 12 * (1 - q), i % 2 ? C.amber : '#fff', (1 - q) * 0.9);
+          }
         }
-        rr(cx - 260, 470, 520, 150, 24); ctx.fillStyle = 'rgba(6,7,14,0.82)'; ctx.fill();
-        panelLabel('OPEN BUGS', cx, 520, C.red);
-        font(900, 78, DISPLAY); ctx.textAlign = 'center';
-        glowText(fmt(1e6 * Math.pow(p, 3)), cx, 600, C.red, 'rgba(255,77,94,0.8)', 20);
+        emoji('🦄', x, y, 220, Math.sin(t * 2) * 0.08 - up * 0.5);
+        ctx.restore();
+      }
+    }
+    // "Worth a billion by July": the valuation hits a billion, then the deadline
+    if (L2) {
+      const a = holdFor(t, L2, L3, end);
+      if (a > 0) {
+        ctx.save(); ctx.globalAlpha *= a;
+        const base = ctx.globalAlpha;
+        const p = easeIn(inv(L2.t0, wordAt(L2, 2).t0 + 0.3, t));
+        panelLabel('VALUATION', cx, 380);
+        font(900, 86, DISPLAY); ctx.textAlign = 'center';
+        glowText('$' + fmt(1e9 * p), cx, 480, p >= 1 ? C.green : C.white, p >= 1 ? 'rgba(67,245,154,0.9)' : 'rgba(124,92,255,0.6)', 24);
+        const jul = wordAt(L2, 4);
+        const e = inv(jul.t0 - 0.05, jul.t0 + 0.25, t);
+        if (e > 0) {
+          ctx.globalAlpha = base * e;
+          ctx.save(); ctx.translate(cx, 650); ctx.scale(easeBack(e), easeBack(e));
+          emoji('📅', -110, 0, 120);
+          font(900, 72, DISPLAY); ctx.textAlign = 'left';
+          glowText('JULY', -30, 26, C.amber, 'rgba(255,181,71,0.8)', 18);
+          ctx.restore();
+        }
         ctx.textAlign = 'left';
         ctx.restore();
       }
     }
-    // 3: pretty / fast / scale
-    const L3 = ls[2];
+    // "Make it pretty, make it scale"
     if (L3) {
-      const a = inv(L3.t0 - 0.2, L3.t0, t) * (1 - inv(L3.t1 + 0.3, L3.t1 + 0.6, t));
+      const a = holdFor(t, L3, L4, end);
       if (a > 0) {
         ctx.save(); ctx.globalAlpha *= a;
-        const items = [[2, 'pretty', '✨', 330], [5, 'fast', '⚡', 540], [8, 'SCALE', '📈', 760]];
-        items.forEach(([wi, label, em, y], k) => {
+        [[2, 'pretty', '✨', 400], [5, 'SCALE', '📈', 640]].forEach(([wi, label, em, y], k) => {
           const w = wordAt(L3, wi);
           const e = inv(w.t0 - 0.05, w.t0 + 0.15, t);
           if (e <= 0) return;
           ctx.save();
           ctx.globalAlpha *= e;
-          const sc = k === 2 ? lerp(0.6, 1.25, easeOut(inv(w.t0, w.t1, t))) : easeBack(e);
+          const sc = k === 1 ? lerp(0.6, 1.3, easeOut(inv(w.t0, w.t0 + 1.2, t))) : easeBack(e);
           ctx.translate(cx, y); ctx.scale(sc, sc);
           font(900, 96, DISPLAY); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           if (k === 0) {
@@ -551,26 +563,19 @@
             for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsl(${(i * 60 + t * 120) % 360},90%,70%)`);
             ctx.fillStyle = g; ctx.fillText(label, 0, 0);
             sparkles(t, 0, 0, 230, 70, 10, 50, '#fff', 1);
-          } else if (k === 1) {
-            for (let i = 0; i < 7; i++) {
-              ctx.fillStyle = `rgba(62,230,255,${0.12 + 0.1 * hash(i)})`;
-              ctx.fillRect(-330 - ((t * 900 + i * 120) % 300), -50 + i * 15, 180, 4);
-            }
-            glowText(label, 0, 0, C.cyan, 'rgba(62,230,255,0.9)', 22);
           } else {
             glowText(label, 0, 0, C.white, 'rgba(124,92,255,0.9)', 26);
           }
-          emoji(em, k === 2 ? 210 : 190, -6, 64);
+          emoji(em, k === 1 ? 210 : 190, -6, 64);
           ctx.restore();
         });
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         ctx.restore();
       }
     }
-    // 4: first try
-    const L4 = ls[3];
+    // "Get it right and never fail"
     if (L4) {
-      const a = inv(L4.t0 - 0.2, L4.t0, t) * (1 - inv(L4.t1 + 0.1, L4.t1 + 0.45, t));
+      const a = holdFor(t, L4, null, end);
       if (a > 0) {
         ctx.save(); ctx.globalAlpha *= a;
         const base = ctx.globalAlpha;
@@ -584,7 +589,7 @@
           check(cx, 505, r * 0.55, C.green, 16, inv(w.t0, w.t0 + 0.3, t));
           ctx.restore();
         }
-        const f = wordAt(L4, 7);
+        const f = wordAt(L4, 4);
         const e2 = inv(f.t0 - 0.05, f.t0 + 0.2, t);
         if (e2 > 0) {
           ctx.globalAlpha = base * e2;
@@ -606,7 +611,7 @@
     const ls = get('verse1', 'lead');
     ctx.save();
     ctx.globalAlpha = inv(s.t0 - 0.01, s.t0 + 0.25, t);
-    gagVerse1(t, ls);
+    gagVerse1(t, ls, s.t1 - 0.3);
     chatStack(t, ls, 'right', { x: 1790, bottom: 900, maxW: 900, size: 52 });
     ctx.restore();
   }
@@ -942,6 +947,27 @@
     ctx.restore();
   }
 
+  function slate(t, w, x, y) {
+    const e = inv(w.t0 - 0.05, w.t0 + 0.2, t) * (1 - inv(w.t0 + 1.6, w.t0 + 1.9, t));
+    if (e <= 0) return;
+    const clap = 1 - easeOut(inv(w.t0, w.t0 + 0.15, t));
+    ctx.save();
+    ctx.globalAlpha *= e;
+    ctx.translate(x, y); ctx.rotate(-0.08); ctx.scale(easeBack(e), easeBack(e));
+    rr(-150, -40, 300, 150, 12); ctx.fillStyle = '#16182c'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.save(); ctx.translate(-150, -40); ctx.rotate(-0.5 * clap);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, -36, 300, 36);
+    ctx.fillStyle = '#16182c';
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(20 + i * 60, -36); ctx.lineTo(50 + i * 60, -36); ctx.lineTo(30 + i * 60, 0); ctx.lineTo(0 + i * 60, 0); ctx.fill(); }
+    ctx.restore();
+    font(800, 52, MONO); ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.fillText('TAKE 1', 0, 58);
+    font(600, 22, MONO); ctx.fillStyle = C.dim; ctx.fillText('of 1', 0, 92);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   function rays(t, a, b, cx, cy, color, strength = 1) {
     const e = strength * inv(a - 0.2, a + 0.3, t) * (1 - inv(b, b + 0.4, t));
     if (e <= 0) return;
@@ -993,8 +1019,11 @@
       // gags around the text; "BREAK" gets its crack in finalWord
       if (i === 1) progress(t, wordAt(line, 3).t0, line.t1 - 0.1, final ? 'breaking things on purpose…' : 'deploying to prod…');
       if (i === 2) {
-        if (!final) crosshair(t, line.t0, W / 2, 420);
-        rays(t, wordAt(line, 2).t0, line.t1, W / 2, 360, final ? '255,210,140' : name === 'chorus2' ? '160,240,255' : '255,200,240', final ? 0.6 : 1);
+        if (!final) {
+          crosshair(t, line.t0, W / 2, 420);
+          slate(t, wordAt(line, 3), 1500, 820);
+        }
+        rays(t, wordAt(line, 4).t0, line.t1, W / 2, 360, final ? '255,210,140' : name === 'chorus2' ? '160,240,255' : '255,200,240', final ? 0.6 : 1);
       }
       bigLyrics(t, line, endT, pal, 400, { draw: final ? finalWord : null });
       if (i === 1 && !final) rocket(t, line.t0, line.t0 + 1.9);
@@ -1033,6 +1062,12 @@
         outlined('NEW', 0, 0, size);
       }
       ctx.restore();
+      return true;
+    }
+    if (w.s === 'DOWN' || w.s === 'UP') {
+      const d = easeOut(inv(w.t0, w.t0 + 0.3, t)) * size * (w.s === 'DOWN' ? 0.22 : -0.2);
+      ctx.fillStyle = '#fff';
+      outlined(w.s, w.x, y + d, size);
       return true;
     }
     if (w.s === 'BREAK') {
@@ -1172,7 +1207,7 @@
 
   // --- verse 2: the agent answers
 
-  function diffPanel(t, x, y, a0, how) {
+  function diffPanel(t, x, y, a0, bug, had) {
     const e0 = inv(a0, a0 + 0.35, t);
     if (e0 <= 0) return;
     const e = e0 * ctx.globalAlpha;
@@ -1193,8 +1228,16 @@
       ctx.fillStyle = sgn === '-' ? C.red : sgn === '+' ? C.green : C.dim;
       ctx.fillText(sgn + ' ' + code, x + 28, yy);
     });
-    if (how && t >= how.t0 - 0.05) {
-      const p = inv(how.t0 - 0.05, how.t0 + 0.2, t);
+    // "the bug you never had": the bug crawls over the diff, then turns out to be a ghost
+    if (bug && t >= bug.t0) {
+      const crawl = inv(bug.t0, had.t0 + 0.6, t), gone = inv(had.t0, had.t0 + 0.9, t);
+      const bx = x + 60 + crawl * 560, by = y + 70 - gone * 160;
+      ctx.globalAlpha = e * (1 - gone * 0.8);
+      emoji(t < had.t0 ? '🐛' : '👻', bx, by + Math.sin(t * 9) * 4 * (1 - gone), 70, t < had.t0 ? Math.sin(t * 6) * 0.15 : 0);
+    }
+    const shrug = had && had.t0 + 0.45;
+    if (had && t >= shrug - 0.05) {
+      const p = inv(shrug - 0.05, shrug + 0.2, t);
       ctx.globalAlpha = e * p;
       ctx.translate(x + 380, y + 230); ctx.rotate(-0.06); ctx.scale(easeBack(p), easeBack(p));
       rr(-300, -80, 600, 150, 30); ctx.fillStyle = 'rgba(11,12,24,0.92)'; ctx.fill();
@@ -1315,7 +1358,7 @@
     }
     if (L2 && t < L2.t1 + 0.7) {
       ctx.save(); ctx.globalAlpha *= 1 - inv(L2.t1 + 0.3, L2.t1 + 0.6, t);
-      diffPanel(t, 1050, 300, L2.t0 - 0.35, wordAt(L2, 7));
+      diffPanel(t, 1050, 300, L2.t0 - 0.35, wordAt(L2, 3), wordAt(L2, 6));
       ctx.restore();
     }
     if (L3 && t > L3.t0 - 0.3 && t < L3.t1 + 1.4) {
@@ -1395,8 +1438,12 @@
     // marks: wrong guesses, then corrected, then gathered into a heart
     const N = HEART.length;
     const p3 = L3 ? inv(L3.t0 + 0.2, L3.t1 - 0.4, t) : 0;
+    const wrongs = L1 ? L1.words.slice(-3) : [];
     for (let i = 0; i < N; i++) {
-      const appear = L2 ? L2.t0 + hash(i * 1.1) * 3.4 : 999;
+      // a quarter appear during "a billion guesses", the rest burst on each "wrong"
+      const appear = !L1 ? 999 : hash(i * 7.7) < 0.25
+        ? L1.t0 + hash(i * 1.1) * (wrongs[0].t0 - L1.t0)
+        : wrongs[i % 3].t0 + hash(i * 1.1) * 0.3;
       if (t < appear) continue;
       const sx = 120 + hash(i * 2.3) * (W - 240), sy = 120 + hash(i * 3.7) * (H - 300);
       const g = L4 ? easeInOut(inv(L4.t0 + 0.2 + hash(i) * 0.9, L4.t0 + 1.6 + hash(i) * 0.9, t)) : 0;
@@ -1409,11 +1456,17 @@
       const r = lerp(9, 7, g) * easeBack(k);
       if (fixed) check(x, y, r, g > 0.5 ? '#ff6b9a' : C.green, 3.5);
       else cross(x, y, r, C.red, 3.5);
+      if (fixed && g === 0 && p3 > 0 && p3 < 1 && hash(i * 9.1) < 0.12) {
+        const age = ((t * 0.7 + hash(i)) % 1);
+        ctx.globalAlpha = (1 - age) * 0.8;
+        font(700, 30, UI); ctx.fillStyle = C.cyan;
+        ctx.fillText('♪', x + 6, y - 14 - age * 70);
+      }
     }
     ctx.globalAlpha = 1;
-    if (L2 && t >= L2.t0 && t < (L4 ? L4.t0 + 0.6 : 999)) {
-      const a = inv(L2.t0, L2.t0 + 0.3, t) * (1 - inv(L4.t0, L4.t0 + 0.6, t));
-      const p = inv(L2.t0, L2.t1, t);
+    if (L1 && t >= L1.t0 && t < (L4 ? L4.t0 + 0.6 : 999)) {
+      const a = inv(L1.t0, L1.t0 + 0.3, t) * (1 - inv(L4.t0, L4.t0 + 0.6, t));
+      const p = inv(L1.t0, L1.t1, t);
       ctx.save(); ctx.globalAlpha = a;
       font(700, 30, MONO); ctx.fillStyle = C.dim; ctx.fillText('guesses', 140, 120);
       font(900, 54, DISPLAY); ctx.fillStyle = C.white; ctx.fillText(fmt(1e9 * Math.pow(p, 2)), 140, 180);
@@ -1422,8 +1475,9 @@
       ctx.restore();
     }
     // loss curve
-    if (L3 && t >= L3.t0 - 0.3) {
-      const a = inv(L3.t0 - 0.3, L3.t0, t) * (1 - inv(L4.t0, L4.t0 + 0.6, t));
+    if (L2 && t >= L2.t0 - 0.3) {
+      const a = inv(L2.t0 - 0.3, L2.t0, t) * (1 - inv(L4.t0, L4.t0 + 0.6, t));
+      const pl = inv(L2.t0 + 0.2, L2.t1 - 0.2, t);
       const x0 = 460, y0 = 580, w = 1000, h = 250;
       ctx.save(); ctx.globalAlpha = a;
       rr(x0 - 40, y0 - 40, w + 80, h + 90, 20); ctx.fillStyle = 'rgba(5,8,20,0.8)'; ctx.fill();
@@ -1435,12 +1489,12 @@
       // f(u) grows with u in screen space, i.e. the loss falls as training goes on
       ctx.strokeStyle = C.cyan; ctx.lineWidth = 5; ctx.shadowColor = C.cyan; ctx.shadowBlur = 20;
       ctx.beginPath();
-      for (let i = 0; i <= 200 * p3; i++) {
+      for (let i = 0; i <= 200 * pl; i++) {
         const u = i / 200;
         if (i === 0) ctx.moveTo(x0 + u * w, f(u)); else ctx.lineTo(x0 + u * w, f(u));
       }
       ctx.stroke();
-      const u = p3, yy = f(u);
+      const u = pl, yy = f(u);
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x0 + u * w, yy, 12, 0, 7); ctx.fill();
       ctx.restore();
     }

@@ -12,7 +12,7 @@ no samples, stock footage or music models are used.
 | File | Role |
 | --- | --- |
 | `song.py` | The score: sections, chords, hyphenated lyrics and melodies on a sixteenth-note grid. |
-| `singer.py` | The singing voice. Piper TTS speaks each line with phoneme timings; the WORLD vocoder puts every vowel on its beat, stretches it to the note length and replaces the pitch with the melody (with glides, vibrato and doubles). |
+| `singer.py` | The singing voice. A TTS voice (Kokoro, or Piper) speaks each line and reports when every phoneme starts and ends; the WORLD vocoder puts every vowel on its beat, stretches it to the note length and replaces the pitch with the melody (with glides, vibrato and doubles). |
 | `synth.py` | A small numpy/numba synthesizer: drums, bass, supersaw pads, plucks, an FM electric piano, risers, reverb, delay, compression and a limiter. |
 | `build_audio.py` | Arranges the instruments, produces and mixes the vocals, masters the song, and exports the per-word lyric timings and audio features that drive the picture. |
 | `visuals/video.js` | The video. Every frame is a pure function of time on a 2D canvas, cut to the same word timings, kicks and snares as the audio. |
@@ -20,22 +20,26 @@ no samples, stock footage or music models are used.
 
 ## Rebuild
 
+Kokoro needs Python 3.10–3.12.
+
 ```sh
-python -m venv .venv && . .venv/bin/activate
+python3.12 -m venv .venv && . .venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
-./fetch_voices.sh            # Piper voices into ./voices
 python build_audio.py        # build/song.wav, timing.json, features.json
 npm install playwright && npx playwright install chromium
 node render_video.mjs        # build/make-no-mistakes.mp4
 ```
 
+The first run downloads the Kokoro model from Hugging Face. Vocal renders are
+cached per part in `build/vocals.pkl` (pass `--fresh-vocals` to redo them all).
 `node render_video.mjs --sheet 33,45,120` writes a contact sheet of those moments,
-and `--still 33` a single full-size frame. Piper adds random variation each time it
-speaks, so vocal renders are cached per part in `build/vocals.pkl`; pass
-`--fresh-vocals` to `build_audio.py` for new takes.
+and `--still 33` a single full-size frame.
 
 ## Voices
 
-Both voices are Piper models trained on public-domain recordings:
-`en_US-ljspeech-high` (the singer, and the AI's asides) and `en_US-bryce-medium`
-(the person typing the prompts). Everything else is synthesized from scratch.
+Both voices are from [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)
+(Apache-2.0): `af_heart` sings and voices the AI's asides, and `am_michael` is the
+person typing the prompts. `VOICES` in `build_audio.py` picks them; Piper models
+also work, e.g. `piper:en_US-ljspeech-high` with the model in `./voices`.
+Everything else is synthesized from scratch.
